@@ -1,0 +1,152 @@
+qword stdcall __llmul(EAX:ECX;qword second);
+qword stdcall __lldiv(EDX:EAX,qword second);
+qword stdcall __lludiv(EDX:EAX,qword second);
+qword stdcall __llumod(EDX:EAX,qword second);
+qword stdcall __llmod(EDX:EAX,qword second);
+
+:qword stdcall __llmul(EAX:ECX,qword second)
+{
+	$push ECX
+	$mul SSDWORD[#second]
+	ECX><EAX;
+	$mul SSDWORD[#second+4]
+	ECX+=EAX;
+	$pop EAX
+	$mul SSDWORD[#second];
+	EDX+=ECX;
+}
+
+inline CALCDIV()
+uses EBP
+{
+	EBP=ECX;
+	ECX=0x40;
+	EDI:ESI=0;
+	loop(ECX){
+		EAX<<=1;
+		$rcl edx,1
+		$rcl esi,1
+		$rcl edi,1
+		IF(EDI:ESI<EBP:EBX)CONTINUE;
+/*		IF(EDI>=EBP){
+			IF(CARRYFLAG||ZEROFLAG){
+				IF(ESI<EBX)CONTINUE;
+			}*/
+			EDI:ESI-=EBP:EBX;
+			EAX++;
+//		}
+	}
+}
+
+:qword stdcall __lldiv(EDX:EAX,qword second)
+uses EBX ESI EDI ECX
+{
+	EDI=0;
+	ECX:EBX=second;
+	IF(ECX==0){
+		IF(EDX==0)||(EBX==0){
+			$div	ebx
+			EDX=0;
+			RETURN;
+		}
+	}
+	IF(long EDX<0){
+		-EDX:EAX;
+		EDI|=1;
+	}
+	IF(long ECX<0){
+		-ECX:EBX;
+		EDI^=1;
+	}
+	$push	EDI
+	CALCDIV();
+	$pop	ebx
+	IF($test EBX,1)-EDX:EAX;
+}
+
+:qword stdcall __lludiv(EDX:EAX,qword second)
+uses EBX ESI EDI ECX
+{
+	ECX:EBX=second;
+	IF(ECX==0){
+		IF(EDX==0)||(EBX==0){
+			$div EBX
+			EDX=0;
+			RETURN;
+		}
+	}
+	CALCDIV();
+}
+
+:qword stdcall __llmod(EDX:EAX,qword second)
+uses EBX ESI EDI ECX
+{
+	EDI=0;
+	ECX:EBX=second;
+	IF(ECX==0){
+		IF(EDX==0)||(EBX==0){
+			$div EBX
+			EAX><EDX;
+			EDX=0;
+			RETURN;
+		}
+	}
+	IF(long EDX<0){
+		-EDX:EAX;
+		EDI|=1;
+	}
+	IF(long ECX<0)-ECX:EBX;
+	$push	EDI
+	CALCDIV();
+	EDX:EAX=EDI:ESI;
+	$pop	EBX
+	IF($test EBX,1)-EDX:EAX;
+}
+
+:qword stdcall __llumod(EDX:EAX,qword second)
+uses EBX ESI EDI ECX
+{
+	ECX:EBX=second;
+	IF(ECX==0){
+		IF(EDX==0)||(EBX==0){
+			$div EBX
+			EAX><EDX;
+			EDX=0;
+			RETURN;
+		}
+	}
+	CALCDIV();
+	EDX:EAX=EDI:ESI;
+}
+
+:qword fastcall __llshl(EDX:EAX,CL)
+{
+	IF(CL<0x20){
+		$shld	EDX,EAX,CL
+		EAX<<=CL;
+		RETURN;
+	}
+	IF(CL<0x40){
+		EDX=EAX;
+		EDX<<=CL;
+		EAX=0;
+		RETURN;
+	}
+	EDX:EAX=0;
+}
+
+:qword fastcall __llushr(EDX:EAX,CL)
+{
+	IF(CL<0x20){
+		$shrd	EAX,EDX,cl
+		EDX>>=CL;
+		RETURN;
+	}
+	IF(CL<0x40){
+		EAX=EDX;
+		EDX=0;
+		EAX>>=CL;
+		RETURN;
+	}
+	EDX:EAX=0;
+}

@@ -1,0 +1,32 @@
+#ifndef _CLIP_H_
+#define _CLIP_H_
+
+#define CF_TEXT      0x01
+#define CF_BITMAP    0x02
+#define CF_OEMTEXT   0x07
+#define CF_DSPTEXT   0x81
+#define CF_DSPBITMAP 0x82
+
+#define CB_API_GETVER  0x1700
+#define CB_API_OPEN    0x1701
+#define CB_API_CLEAR   0x1702
+#define CB_API_SET     0x1703
+#define CB_API_GETSIZE 0x1704
+#define CB_API_GET     0x1705
+#define CB_API_CLOSE   0x1708
+#define CB_API_COMPACT 0x1709
+#define CB_API_GETCAPS 0x170A
+
+:inline void CB_API(AX)     { $INT 0x2F; }
+:inline char CB_DETECT(AX)  { @CB_API(CB_API_GETVER); CL = 0; IF(AX != CB_API_GETVER) CL++; AL = CL;}
+:inline void CB_OPEN()      { @CB_API(CB_API_OPEN); }
+:inline void CB_CLEAR()     { @CB_API(CB_API_CLEAR); }
+:inline void CB_CLOSE()     { @CB_API(CB_API_CLOSE); }
+:inline word CB_SIZE()      { DX = CF_TEXT; @CB_API(CB_API_GETSIZE); }
+// ES:BX = data
+:inline void CB_GET(BX)     { @CB_API(CB_API_GET); }
+// ES:BX = data, CX = size
+:inline void CB_SET(BX, CX) { DX = CF_TEXT; SI = 0; @CB_API(CB_API_SET); }
+
+#endif
+

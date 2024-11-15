@@ -1,0 +1,16 @@
+all: CLIPDRV.EXE CLIPCLI.COM
+
+CLIPDRV.EXE: CLIPDRV.C-- CLIP.H-- XMS.H--
+   ..\TOOLS\c-- /TEXE /X CLIPDRV.C--
+
+CLIPCLI.COM: CLIPCLI.C-- CLIP.H--
+   ..\TOOLS\c-- /X CLIPCLI.C--
+
+install: all
+   copy CLIPDRV.EXE ..\BIN
+   copy CLIPCLI.COM ..\BIN
+
+clean:
+   del CLIPDRV.EXE
+   del CLIPCLI.COM
+   del *.BAK

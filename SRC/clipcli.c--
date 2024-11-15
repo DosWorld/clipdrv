@@ -1,0 +1,142 @@
+/*
+MIT License
+
+Copyright (c) 2024 DosWorld
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*/
+
+#resize FALSE
+#parsecommandline FALSE
+
+#include "clip.h--"
+
+#define STDIN     0
+#define STDOUT    1
+#define EOF       0x1A
+#define CTRL_D    0x04
+#define BACKSPACE 0x08
+#define CR        0x0D
+
+// PRINT(char)
+void PRINT(DL) { $PUSH AX; AH = 0x02; $ INT 0x21; $POP AX; }
+
+: word read (word filehandle,bufferoffset,bytes) inline {
+$ DB 0x5F,0x59,0x5A,0x5B,0xB4,0x3F,0xCD,0x21,0x73,0x2,
+     0x31,0xC0,0xFF,0xE7
+}
+
+: word write (word filehandle,bufferoffset,bytes) inline {
+$DB 0x5F,0x59,0x5A,0x5B,0xB4,0x40,0xCD,0x21,0x73,0x2,
+    0x31,0xC0,0xFF,0xE7
+}
+
+: inline char HAS_KEY() { AH = 0x0B; $INT 0x21; }
+
+:char STDIN_REDIR() {
+        AX = 0x4400; BX = STDIN; $INT 0x21;
+        IF(DL & 0x81 == 0) AL = TRUE; ELSE AL = FALSE;
+        RETURN AL;
+}
+
+
+char PASTE() {
+        CB_OPEN();
+        AX = CB_SIZE();
+        IF(AX != 0) {
+                $PUSH AX;
+                AX = DS; AX += 0x1000; ES = AX; DS = AX;
+                CB_GET(0);
+                $POP DX;
+                write(STDOUT, 0, DX);
+        }
+        CB_CLOSE();
+        AL = 0;
+}
+
+char COPY() {
+        AX = DS; AX += 0x1000; ES = AX; DS = AX;
+        CB_OPEN();
+        IF(STDIN_REDIR()) {
+                DI = read(STDIN, 0, 0xFFFF);
+        } ELSE {
+                $CLD;
+                DI = 0;
+                WHILE(!@HAS_KEY()) {
+                        AH = 8; $INT 0x21;
+                        IF(AL == EOF) BREAK;
+                        IF(AL == CTRL_D) BREAK;
+                        IF(AL == BACKSPACE) {
+                                IF(DI != 0) {
+                                        PRINT(AL);
+                                        DI--;
+                                        IF(DI != 0) IF(ESBYTE[DI] == 0x0D) DI--;
+                                }
+                        } ELSE IF(AL == CR) {
+                                $STOSB;
+                                PRINT(AL);
+                                AL = 0x0A;
+                                $STOSB;
+                                PRINT(AL);
+                        } ELSE {
+                                $STOSB;
+                                PRINT(AL);
+                        }
+                }
+        }
+        CB_SET(0, DI);
+        CB_CLOSE();
+        AL = 0;
+}
+
+:void AMSG(DX) { AH = 9; $INT 0x21; }
+
+char HELP() {
+        AMSG("ClipCLI. RELEASE-20241115, (c) 2024 DosWorld, MIT License\n\n$");
+        AMSG("Usage:\tCLIPCLI.COM P|C\t(P=paste, C=copy)\n$");
+        RETURN 1;
+}
+
+void main() {
+        IF(!CB_DETECT()) {
+                DX = "ERROR: Clipboard API not present\n$";
+                AH = 9;
+                $INT 0x21;
+                AL = 1;
+        } ELSE {
+                BX = 0x80;
+                CL = DSBYTE[BX];
+                BX++;
+                WHILE(CL != 0) {
+                        AL = DSBYTE[BX];
+                        IF(AL > 0x20) BREAK;
+                        BX++;
+                        CL--;
+                }
+                IF(CL == 0) AL = HELP();
+                ELSE IF(AL == 'p') AL = PASTE();
+                ELSE IF(AL == 'P') AL = PASTE();
+                ELSE IF(AL == 'c') AL = COPY();
+                ELSE IF(AL == 'C') AL = COPY();
+                ELSE AL = HELP();
+        }
+        AH = 0x4C;
+        $INT 0x21;
+}
+

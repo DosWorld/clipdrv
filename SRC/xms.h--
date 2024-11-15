@@ -1,0 +1,73 @@
+#ifndef _XMS_H_
+#define _XMS_H_
+
+#define XMS_API_CHECK    0x4300
+#define XMS_GET_API_ADDR 0x4310
+#define XMS_API_MALLOC   0x09
+#define XMS_API_FREE     0x0A
+#define XMS_API_COPY     0x0B
+#define XMS_API_SCOPY    0xCB
+
+dword xmsApiEntry = 0;
+
+struct StructXmsRec {
+        dword len;
+        word  src_hnd;
+        dword src_ofs;
+        word  dst_hnd;
+        dword dst_ofs;
+        byte  src_high;
+        byte  dst_high;
+} xmsRec = { 0 };
+
+void XMS_CLEAR_REC() {
+        $PUSH DI, CX, AX, ES, CS;
+        $POP ES;
+        DI = #xmsRec;
+        CX = sizeof(xmsRec);
+        AL = 0;
+        $CLD;
+        $REP; $STOSB;
+        $POP ES, AX, CX, DI;
+}
+
+:inline void XMS(AH) { $CALL FAR CSDWORD[#xmsApiEntry]; }
+
+char IS_XMS() {
+        AX = XMS_API_CHECK;
+        $INT 0x2F;
+        IF(AL == 0x80) {
+                AX = XMS_GET_API_ADDR;
+                $INT 0x2F;
+                DSWORD[#xmsApiEntry] = BX;
+                DSWORD[#xmsApiEntry+2] = ES;
+                AL = TRUE;
+        } ELSE AL = FALSE;
+        RETURN AL;
+}
+// DX = size in kB
+:inline word XMS_MALLOC(DX) { @XMS(XMS_API_MALLOC); IF(AX == 1) AX = DX; ELSE AX = 0;}
+// DX = handle
+:inline void XMS_FREE(DX) { @XMS(XMS_API_FREE); }
+
+char pascal xmsCopy(word lenl, word lenh, word srcHnd, word srcl, word srch, word dstHnd, word dstl, word dsth) {
+        XMS_CLEAR_REC();
+        $PUSH DS, SI, CX;
+        $PUSH CS;
+        $POP DS;
+        DSWORD[#xmsRec.len] = lenl;
+        DSWORD[#xmsRec.len + 2] = lenh;
+        xmsRec.src_hnd = srcHnd;
+        DSWORD[#xmsRec.src_ofs] = srcl;
+        DSWORD[#xmsRec.src_ofs + 2] = srch;
+        xmsRec.dst_hnd = dstHnd;
+        DSWORD[#xmsRec.dst_ofs] = dstl;
+        DSWORD[#xmsRec.dst_ofs + 2] = dsth;
+
+        SI = #xmsRec;
+        @XMS(XMS_API_COPY);
+        $POP CX, SI, DS;
+}
+
+#endif
+
