@@ -28,11 +28,13 @@ SOFTWARE.
 #include "clip.h--"
 #include "xms.h--"
 
-#define CB_VER       0x0001
 #define CB_ERROR     0x0000
 
 #define INT_CBD      0x2F
 #define INT_PSCREEN  0x05
+
+#define CLIPDRV_SIGN 0x4457
+#define CLIPDRV_VER  0x0001
 
 dword oldCbInt = 0;
 dword oldPsInt = 0;
@@ -43,76 +45,73 @@ word cbDataSize = 0;
 word cbDataType = CF_TEXT;
 byte cbLastByte = 0;
 
-word bufSeg = 0;
-word bufOfs = 0;
-
 word scrSeg = 0xB800;
 word scrW = 0;
 word scrH = 0;
 word scrSize = 0;
+
+void COPY() {
+        $PUSH BX, CX, DX, SI, DI;
+        cbDataType = DX;
+        cbDataSize = CX;
+        $PUSH CX;
+        CX &= 0xFFFE;
+        $PUSH BX;
+        IF(CX != 0) xmsCopy(CX, 0,  0, BX, ES,  xmsHndl, 0, 0);
+        $POP BX;
+        $POP AX;
+        BX += AX - 1;
+        IF(AX & 1 != 0) {
+                cbLastByte = ESBYTE[BX];
+        }
+        $POP DI, SI, DX, CX, BX;
+        AX = TRUE;
+}
+
+void PASTE() {
+        AX = cbDataSize;
+        $PUSH AX;
+        AX &= 0xFFFE;
+        $PUSH BX;
+        IF(AX != 0) xmsCopy(AX, 0,  xmsHndl, 0, 0,  0, BX, ES);
+        $POP BX;
+        $POP AX;
+        BX += AX - 1;
+        IF(AX & 1 != 0) {
+                ESBYTE[BX] = cbLastByte;
+        }
+        DX = cbDataType;
+        AX = TRUE;
+}
 
 interrupt NEW_CB_INT() {
         $PUSHF;
         $PUSH BX;
         $PUSH DS, CS;
         $POP DS;
-        bufOfs = BX;
-        bufSeg = ES;
-        if(AX == CB_API_GETVER) {
-                AX = CB_VER;
-        } else if(AX == CB_API_OPEN) {
+        IF(AX == CB_API_GETVER) {
+                AX = CLIPDRV_SIGN;
+                BX = CLIPDRV_VER;
+        } ELSE IF(AX == CB_API_OPEN) {
                 AX = TRUE;
-        } else if(AX == CB_API_CLEAR) {
+        } ELSE IF(AX == CB_API_CLEAR) {
                 cbDataSize = 0;
                 cbDataType = CF_TEXT;
                 AX = TRUE;
-        } else if(AX == CB_API_SET) {
-                IF(SI == 0) {
-                        $PUSH BX, CX, DX, SI, DI;
-                        cbDataType = DX;
-                        cbDataSize = CX;
-                        $PUSH CX;
-                        AX = CX;
-                        AX = AX >> 1;
-                        AX = AX << 1;
-                        CX = AX;
-                        IF(AX != 0) xmsCopy(CX, 0,  0, bufOfs, bufSeg,  xmsHndl, 0, 0);
-                        $POP AX;
-                        BX = AX + bufOfs - 1;
-                        IF(AX & 1 != 0) {
-                                AX = bufSeg; ES = AX;
-                                AL = ESBYTE[BX];
-                                cbLastByte = AL;
-                        }
-                        $POP DI, SI, DX, CX, BX;
-                        AX = TRUE;
-                } ELSE AX = CB_ERROR;
-        } else if(AX == CB_API_GETSIZE) {
+        } ELSE IF(AX == CB_API_SET) {
+                IF(SI == 0) COPY(); ELSE AX = CB_ERROR;
+        } ELSE IF(AX == CB_API_GETSIZE) {
                 DX = 0;
                 AX = cbDataSize;
-        } else if(AX == CB_API_GET) {
-                AX = cbDataSize;
-                $PUSH AX;
-                AX = AX >> 1;
-                AX = AX << 1;
-                CX = AX;
-                IF(AX != 0) xmsCopy(CX, 0,  xmsHndl, 0, 0,  0, bufOfs, bufSeg);
-                $POP AX;
-                BX = AX + bufOfs - 1;
-                IF(AX & 1 != 0) {
-                        AX = bufSeg; ES = AX;
-                        AL = cbLastByte;
-                        ESBYTE[BX] = AL;
-                }
-                DX = cbDataType;
+        } ELSE IF(AX == CB_API_GET) {
+                PASTE();
+        } ELSE IF(AX == CB_API_CLOSE) {
                 AX = TRUE;
-        } else if(AX == CB_API_CLOSE) {
-                AX = TRUE;
-        } else if(AX == CB_API_COMPACT) {
+        } ELSE IF(AX == CB_API_COMPACT) {
                 DX = AX = 0;
-        } else if(AX == CB_API_GETCAPS) {
+        } ELSE IF(AX == CB_API_GETCAPS) {
                 AX = CB_ERROR;
-        } else {
+        } ELSE {
                 $POP DS, BX;
                 $POPF;
                 $JMP FAR CSDWORD[#oldCbInt];
@@ -121,25 +120,25 @@ interrupt NEW_CB_INT() {
         $POPF;
 }
 
-char CHECK_VMODE() {
+:inline char CHECK_VMODE() {
         AH = 0x0F; $INT 0x10;
         IF(AL == 0) {
-                AX = TRUE;
+                AL = TRUE;
         } ELSE IF(AL == 1) {
-                AX = TRUE;
+                AL = TRUE;
         } ELSE IF(AL == 2) {
-                AX = TRUE;
+                AL = TRUE;
         } ELSE IF(AL == 3) {
-                AX = TRUE;
+                AL = TRUE;
         } ELSE IF(AL == 7) {
-                AX = TRUE;
+                AL = TRUE;
         } ELSE IF(AL == 8) {
-                AX = TRUE;
-        } ELSE AX = FALSE;
-        RETURN AX;
+                AL = TRUE;
+        } ELSE AL = FALSE;
+        RETURN AL;
 }
 
-void GET_SCEEN_SIZE() {
+:inline void GET_SCEEN_SIZE() {
         $PUSH DS;
         AX = 0; DS = AX;
         AL = DSBYTE[0x0484]; // height
@@ -182,8 +181,7 @@ void COPY_SCREEN() {
         CX = DI;
         DX = CF_TEXT;
         SI = BX = 0;
-        AX = CB_API_SET;
-        $INT 0x2F;
+        @CB_API(CB_API_SET);
         $POP DS;
 }
 
@@ -192,8 +190,8 @@ interrupt NEW_PS_INT() {
         $PUSH ES, DS, BP, SI, DI, DX, CX, BX, AX;
         $PUSH CS, CS;
         $POP DS, ES;
-        IF(CHECK_VMODE()) {
-                GET_SCEEN_SIZE();
+        IF(@CHECK_VMODE()) {
+                @GET_SCEEN_SIZE();
                 // Save screen
                 xmsCopy(scrSize, 0,  0, 0, scrSeg,  xmsHndl, 0, 1);
                 COPY_SCREEN();
@@ -218,6 +216,7 @@ void INSTALL() {
         AX = XMS_MALLOC(128);
         IF(AX == 0) {
                 AMSG("\nERROR: Colud not allocate 128kB XMS-memory\n$");
+                RETURN;
         } ELSE xmsHndl = AX;
 
         IF(IS_MONO()){
@@ -238,7 +237,7 @@ void main() {
         $PUSH CS, CS;
         $POP DS, ES;
 
-        AMSG("Clipboard driver. RELEASE-20241115, (c) 2024 DosWorld, MIT License\n$");
+        AMSG("ClipDRV. RELEASE-20241119, (c) 2024 DosWorld, MIT License\n$");
         IF(CB_DETECT()) {
                 AMSG("\nERROR: Clipboard driver already present\n$");
         } ELSE IF(!IS_XMS()) {

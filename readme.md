@@ -10,7 +10,7 @@ Clipboard driver for DOS.
 
 * Provide Win3-clipboard API (INT 2F, AX=1700..170A). See Q67675.TXT
 * Provide clipboard up to 64k.
-* Support copy text screen to cliboard via <PrintScreen> key. In case
+* Support copy text screen to cliboard via `PrintScreen` key. In case
 when ClipDRV does not handle video mode (graphics or VESA) - pass call to
 previous INT 5 handler.
 * Support monochrome adapters (like Hercules) with $B000 video-memory segment.

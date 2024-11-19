@@ -29,25 +29,21 @@ SOFTWARE.
 
 #define STDIN     0
 #define STDOUT    1
-#define EOF       0x1A
+
+#define CTRL_Z    0x1A
 #define CTRL_D    0x04
 #define BACKSPACE 0x08
 #define CR        0x0D
 
-// PRINT(char)
-void PRINT(DL) { $PUSH AX; AH = 0x02; $ INT 0x21; $POP AX; }
+:void PRINT(AL) { $INT 0x29; }
+:void AMSG(DX) { AH = 9; $INT 0x21; }
+:char HAS_KEY() { AH = 0x0B; $INT 0x21; }
 
-: word read (word filehandle,bufferoffset,bytes) inline {
-$ DB 0x5F,0x59,0x5A,0x5B,0xB4,0x3F,0xCD,0x21,0x73,0x2,
-     0x31,0xC0,0xFF,0xE7
-}
+:word read (word filehandle,bufferoffset,bytes) inline {
+$DB 0x5F,0x59,0x5A,0x5B,0xB4,0x3F,0xCD,0x21,0x73,0x2,0x31,0xC0,0xFF,0xE7 }
 
-: word write (word filehandle,bufferoffset,bytes) inline {
-$DB 0x5F,0x59,0x5A,0x5B,0xB4,0x40,0xCD,0x21,0x73,0x2,
-    0x31,0xC0,0xFF,0xE7
-}
-
-: inline char HAS_KEY() { AH = 0x0B; $INT 0x21; }
+:word write (word filehandle,bufferoffset,bytes) inline {
+$DB 0x5F,0x59,0x5A,0x5B,0xB4,0x40,0xCD,0x21,0x73,0x2,0x31,0xC0,0xFF,0xE7 }
 
 :char STDIN_REDIR() {
         AX = 0x4400; BX = STDIN; $INT 0x21;
@@ -55,13 +51,14 @@ $DB 0x5F,0x59,0x5A,0x5B,0xB4,0x40,0xCD,0x21,0x73,0x2,
         RETURN AL;
 }
 
+void ALLOC_MEMORY() { AX = DS; AX += 0x1000; ES = AX; DS = AX; }
 
 char PASTE() {
         CB_OPEN();
         AX = CB_SIZE();
         IF(AX != 0) {
                 $PUSH AX;
-                AX = DS; AX += 0x1000; ES = AX; DS = AX;
+                ALLOC_MEMORY();
                 CB_GET(0);
                 $POP DX;
                 write(STDOUT, 0, DX);
@@ -71,7 +68,7 @@ char PASTE() {
 }
 
 char COPY() {
-        AX = DS; AX += 0x1000; ES = AX; DS = AX;
+        ALLOC_MEMORY();
         CB_OPEN();
         IF(STDIN_REDIR()) {
                 DI = read(STDIN, 0, 0xFFFF);
@@ -80,23 +77,22 @@ char COPY() {
                 DI = 0;
                 WHILE(!@HAS_KEY()) {
                         AH = 8; $INT 0x21;
-                        IF(AL == EOF) BREAK;
+                        IF(AL == CTRL_Z) BREAK;
                         IF(AL == CTRL_D) BREAK;
                         IF(AL == BACKSPACE) {
                                 IF(DI != 0) {
-                                        PRINT(AL);
+                                        @PRINT(AL);
                                         DI--;
                                         IF(DI != 0) IF(ESBYTE[DI] == 0x0D) DI--;
                                 }
-                        } ELSE IF(AL == CR) {
-                                $STOSB;
-                                PRINT(AL);
-                                AL = 0x0A;
-                                $STOSB;
-                                PRINT(AL);
                         } ELSE {
                                 $STOSB;
-                                PRINT(AL);
+                                @PRINT(AL);
+                                IF(AL == CR) {
+                                        AL = 0x0A;
+                                        $STOSB;
+                                        @PRINT(AL);
+                                }
                         }
                 }
         }
@@ -105,36 +101,33 @@ char COPY() {
         AL = 0;
 }
 
-:void AMSG(DX) { AH = 9; $INT 0x21; }
-
-char HELP() {
-        AMSG("ClipCLI. RELEASE-20241115, (c) 2024 DosWorld, MIT License\n\n$");
-        AMSG("Usage:\tCLIPCLI.COM P|C\t(P=paste, C=copy)\n$");
+char ERR(AX) {
+        $PUSH AX;
+        AMSG("ClipCLI. RELEASE-20241119, (c) 2024 DosWorld, MIT License\n\n$");
+        $POP DX;
+        AMSG(DX);
         RETURN 1;
 }
 
 void main() {
         IF(!CB_DETECT()) {
-                DX = "ERROR: Clipboard API not present\n$";
-                AH = 9;
-                $INT 0x21;
+                ERR("ERROR: Clipboard API not present\n$");
                 AL = 1;
         } ELSE {
-                BX = 0x80;
-                CL = DSBYTE[BX];
-                BX++;
+                $CLD;
+                SI = 0x80;
+                $LODSB;
+                CL = AL;
                 WHILE(CL != 0) {
-                        AL = DSBYTE[BX];
+                        $LODSB;
                         IF(AL > 0x20) BREAK;
-                        BX++;
                         CL--;
                 }
-                IF(CL == 0) AL = HELP();
-                ELSE IF(AL == 'p') AL = PASTE();
-                ELSE IF(AL == 'P') AL = PASTE();
-                ELSE IF(AL == 'c') AL = COPY();
+                IF(CL == 0) AL = 0;
+                IF(AL >= 'a') IF(AL <= 'z') AL -= 0x20;
+                IF(AL == 'P') AL = PASTE();
                 ELSE IF(AL == 'C') AL = COPY();
-                ELSE AL = HELP();
+                ELSE AL = ERR("Usage:\tCLIPCLI.COM P|C\t(P=paste, C=copy)\n$");
         }
         AH = 0x4C;
         $INT 0x21;
