@@ -26,34 +26,25 @@ SOFTWARE.
 #parsecommandline FALSE
 
 #include "clip.h--"
-#include "xms.h--"
 
-word xmsHndl = 0;
+word fileHndl = 0;
 
-#define COPY_MEM    xmsCopy
-#define MEM_HANDLER xmsHndl
+#define COPY_MEM    fileCopy
+#define MEM_HANDLER fileHndl
+
+char pascal fileCopy(word lenl, word lenh, word srcHnd, word srcl, word srch, word dstHnd, word dstl, word dsth) {
+}
 
 #include "clipdrv.h--"
-
-void INSTALL() {
-        AX = XMS_MALLOC(128);
-        IF(AX == 0) {
-                AMSG("\nERROR: Colud not allocate 128kB XMS-memory\n$");
-                RETURN;
-        } ELSE xmsHndl = AX;
-        @CLIP_TSR();
-}
 
 void main() {
         $PUSH CS, CS;
         $POP DS, ES;
 
-        AMSG(CLIPDRV_MSG);
+        AMSG(CLIPDRVF_MSG);
         IF(CB_DETECT()) {
                 AMSG("\nERROR: Clipboard driver already present\n$");
-        } ELSE IF(!IS_XMS()) {
-                AMSG("\nERROR: XMS-memory driver is required\n$");
-        } ELSE INSTALL();
+        } ELSE @CLIP_TSR();
         AX = 0x4C01; $INT 0x21;
 }
 

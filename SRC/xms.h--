@@ -44,7 +44,7 @@ struct StructXmsRec {
         byte  dst_high;
 } xmsRec = { 0 };
 
-void XMS_CLEAR_REC() {
+:inline void XMS_CLEAR_REC() {
         $PUSH DI, CX, AX, ES, CS;
         $POP ES;
         DI = #xmsRec;
@@ -55,7 +55,7 @@ void XMS_CLEAR_REC() {
         $POP ES, AX, CX, DI;
 }
 
-:inline void XMS(AH) { $CALL FAR CSDWORD[#xmsApiEntry]; }
+:void XMS(AH) { $CALL FAR CSDWORD[#xmsApiEntry]; }
 
 char IS_XMS() {
         AX = XMS_API_CHECK;
@@ -70,9 +70,9 @@ char IS_XMS() {
         RETURN AL;
 }
 // DX = size in kB
-:inline word XMS_MALLOC(DX) { @XMS(XMS_API_MALLOC); IF(AX == 1) AX = DX; ELSE AX = 0;}
+:inline word XMS_MALLOC(DX) { XMS(XMS_API_MALLOC); IF(AX == 1) AX = DX; ELSE AX = 0;}
 // DX = handle
-:inline void XMS_FREE(DX) { @XMS(XMS_API_FREE); }
+:inline void XMS_FREE(DX) { XMS(XMS_API_FREE); }
 
 char pascal xmsCopy(word lenl, word lenh, word srcHnd, word srcl, word srch, word dstHnd, word dstl, word dsth) {
         XMS_CLEAR_REC();
@@ -89,7 +89,7 @@ char pascal xmsCopy(word lenl, word lenh, word srcHnd, word srcl, word srch, wor
         DSWORD[#SI.StructXmsRec.dst_ofs] = dstl;
         DSWORD[#SI.StructXmsRec.dst_ofs + 2] = dsth;
 
-        @XMS(XMS_API_COPY);
+        XMS(XMS_API_COPY);
         $POP CX, SI, DS;
 }
 
